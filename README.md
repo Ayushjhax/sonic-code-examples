@@ -86,7 +86,3 @@ Examples of using the Rush ECS Framework for onchain game development:
 - [Sonic Documentation](https://docs.sonic.game/)
 - [Rush ECS Framework Documentation](https://docs.sonic.game/developers/rush-ecs-framework/quickstart)
 - [Sonic Agent Kit Documentation](https://github.com/sendaifun/sonic-agent-kit)
-
-## License
-
-This project is licensed under the ISC License - see the LICENSE file for details.
