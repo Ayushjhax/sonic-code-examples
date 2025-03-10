@@ -19,6 +19,7 @@ Simple examples for interacting with the Sonic blockchain:
 - [Send Transaction](ts/basic/send-transaction.ts) - Transfer SOL between accounts
 - [Add Priority Fees](ts/basic/add-priority-fees) - Set compute unit price for transactions
 - [Memo Program](ts/basic/memo-program.ts) - Add memo data to transactions
+- [gRPC Interaction](ts/basic/gRPC-interaction.ts) - Subscribe to account updates via gRPC
 
 ## SPL Token Operations
 
