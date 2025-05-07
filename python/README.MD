@@ -6,3 +6,7 @@ Create a virtual environment
 Install dependencies
 
 1. python3 -m pip install solana solders
+
+Run the program
+
+1. python3 basic.py
