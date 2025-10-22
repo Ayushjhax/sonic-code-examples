@@ -5,20 +5,27 @@ import {
     PublicKey, SystemProgram,
     Transaction,
     ComputeBudgetProgram,
+    VersionedTransaction,
+    TransactionMessage,
 } from '@solana/web3.js';
 
-import * as base58 from 'bs58';
+import base58 from 'bs58';
+import * as dotenv from 'dotenv';
 
+dotenv.config();
 
 (async () => {
     const commitment: Commitment = 'processed';
 
-    const connection = new Connection('https://api.testnet.v1.sonic.game', {
+    const connection = new Connection(process.env.RPC_URL, {
         commitment,
-        wsEndpoint: 'wss://api.testnet.v1.sonic.game'
+        wsEndpoint: process.env.WS_ENDPOINT
     });
 
-    const sender: Keypair = Keypair.fromSecretKey(base58.decode("4DcqYGxBW1WHHwUi7mRnN3uxPbG6oiXRTJ5Fq3nNg74DUs56Ht5JbKmnce7XAcPEt2si5Gyvd2GNLxCHrw1ckXFs"));
+    const privateKey = process.env.SONIC_PRIVATE_KEY;
+    const recipientAddress = process.env.PUBLIC_KEY;
+
+    const sender: Keypair = Keypair.fromSecretKey(base58.decode(privateKey));
 
     const tx = new Transaction();
 
@@ -29,15 +36,25 @@ import * as base58 from 'bs58';
     tx.add(
         SystemProgram.transfer({
             fromPubkey: sender.publicKey,
-            toPubkey: new PublicKey("KjkadiKKYic9Qs53qXScUJDSM6KoG9BnBG4s8iNkP6f"),
+            toPubkey: new PublicKey(recipientAddress),
             lamports: 0.01 * LAMPORTS_PER_SOL
         })
     );
 
     tx.feePayer = sender.publicKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash())[0];
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
 
-    const txHash = await connection.sendTransaction(tx, [sender]);
+    const messageV0 = new TransactionMessage({
+        payerKey: sender.publicKey,
+        recentBlockhash: blockhash,
+        instructions: tx.instructions,
+    }).compileToV0Message();
+
+    const versionedTx = new VersionedTransaction(messageV0);
+    versionedTx.sign([sender]);
+
+    const txHash = await connection.sendTransaction(versionedTx);
 
     console.log("tx hash: ", txHash);
 

@@ -1,6 +1,10 @@
 // we will be using Sega.so to swap tokens
 // docs: https://docs.sega.so/
 
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
 import {
   Connection,
   Keypair,
@@ -9,7 +13,7 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 
-const privateKey = "YOUR_PRIV_KEY";
+const privateKey = process.env.SONIC_PRIVATE_KEY;
 
 const tokenAddresses = {
   sonic: "mrujEYaN1oyQXDHeYNxBYpxWKVkQ2XsGxfznpifu4aL",

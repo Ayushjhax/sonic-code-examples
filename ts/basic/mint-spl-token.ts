@@ -4,6 +4,8 @@ import {
     LAMPORTS_PER_SOL,
     SystemProgram,
     Transaction,
+    VersionedTransaction,
+    TransactionMessage,
 } from '@solana/web3.js';
 
 import {
@@ -17,70 +19,106 @@ import {
     createMintToCheckedInstruction
 } from "@solana/spl-token";
 
-import * as base58 from 'bs58';
+import base58 from 'bs58';
+import * as dotenv from 'dotenv';
 
+dotenv.config();
 
 (async () => {
-    const commitment: Commitment = 'processed';
+    try {
+        const rpcUrl = process.env.RPC_URL;
+        const wsEndpoint = process.env.WS_ENDPOINT;
+        const commitment: Commitment = 'processed';
+        const privateKey = process.env.SONIC_PRIVATE_KEY;
 
-    const connection = new Connection('https://api.testnet.v1.sonic.game', {
-        commitment,
-        wsEndpoint: 'wss://api.testnet.v1.sonic.game'
-    });
+        const connection = new Connection(rpcUrl, {
+            commitment,
+            wsEndpoint
+        });
 
-    const sender: Keypair = Keypair.fromSecretKey(base58.decode("4DcqYGxBW1WHHwUi7mRnN3uxPbG6oiXRTJ5Fq3nNg74DUs56Ht5JbKmnce7XAcPEt2si5Gyvd2GNLxCHrw1ckXFs"));
+        const sender: Keypair = Keypair.fromSecretKey(base58.decode(privateKey));
 
-    const tx = new Transaction();
+        const tx = new Transaction();
+        const tokenMintAccountKeypair = Keypair.generate();
 
-    const tokenMintAccountKeypair = Keypair.generate();
+        console.log("Token mint account:", tokenMintAccountKeypair.publicKey.toBase58());
 
-    console.log("token mint account: ", tokenMintAccountKeypair.publicKey.toBase58());
+        const lamports = await getMinimumBalanceForRentExemptMint(connection);
 
-    const lamports = await getMinimumBalanceForRentExemptMint(connection);
+        // Create account for the mint
+        tx.add(
+            SystemProgram.createAccount({
+                fromPubkey: sender.publicKey,
+                newAccountPubkey: tokenMintAccountKeypair.publicKey,
+                space: MINT_SIZE,
+                lamports,
+                programId: TOKEN_PROGRAM_ID,
+            })
+        );
 
-    tx.add(
-        SystemProgram.createAccount({
-            fromPubkey: sender.publicKey,
-            newAccountPubkey: tokenMintAccountKeypair.publicKey,
-            space: MINT_SIZE,
-            lamports,
-            programId: TOKEN_PROGRAM_ID,
-        })
-    );
+        // Initialize the mint
+        tx.add(
+            createInitializeMint2Instruction(
+                tokenMintAccountKeypair.publicKey, 
+                9, 
+                sender.publicKey, 
+                sender.publicKey, 
+                TOKEN_PROGRAM_ID
+            ),
+        );
 
-    tx.add(
-        createInitializeMint2Instruction(tokenMintAccountKeypair.publicKey, 9, sender.publicKey, sender.publicKey, TOKEN_PROGRAM_ID),
-    );
+        // Get associated token account address
+        const senderTokenAccount = await getAssociatedTokenAddress(
+            tokenMintAccountKeypair.publicKey, 
+            sender.publicKey, 
+            true, 
+            TOKEN_PROGRAM_ID, 
+            ASSOCIATED_TOKEN_PROGRAM_ID
+        );
 
-    const senderTokenAccount = await getAssociatedTokenAddress(tokenMintAccountKeypair.publicKey, sender.publicKey, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+        // Create associated token account
+        tx.add(
+            createAssociatedTokenAccountInstruction(
+                sender.publicKey,
+                senderTokenAccount,
+                sender.publicKey,
+                tokenMintAccountKeypair.publicKey,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            )
+        );
 
-    tx.add(
-        createAssociatedTokenAccountInstruction(
-            sender.publicKey,
-            senderTokenAccount,
-            sender.publicKey,
-            tokenMintAccountKeypair.publicKey,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID)
-    );
+        // Mint tokens to the account
+        tx.add(
+            createMintToCheckedInstruction(
+                tokenMintAccountKeypair.publicKey,
+                senderTokenAccount,
+                sender.publicKey,
+                1000 * LAMPORTS_PER_SOL,
+                9,
+                [],
+                TOKEN_PROGRAM_ID,
+            )
+        );
 
-    tx.add(
-        createMintToCheckedInstruction(
-            tokenMintAccountKeypair.publicKey,
-            senderTokenAccount,
-            sender.publicKey,
-            1000 * LAMPORTS_PER_SOL,
-            9,
-            [],
-            TOKEN_PROGRAM_ID,
-        )
-    );
+        tx.feePayer = sender.publicKey;
+        const { blockhash } = await connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
 
-    tx.feePayer = sender.publicKey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash())[0];
+        const messageV0 = new TransactionMessage({
+            payerKey: sender.publicKey,
+            recentBlockhash: blockhash,
+            instructions: tx.instructions,
+        }).compileToV0Message();
 
-    const txHash = await connection.sendTransaction(tx, [sender, tokenMintAccountKeypair]);
+        const versionedTx = new VersionedTransaction(messageV0);
+        versionedTx.sign([sender, tokenMintAccountKeypair]);
 
-    console.log("tx hash: ", txHash);
+        const txHash = await connection.sendTransaction(versionedTx);
 
+        console.log("tx hash: ", txHash);
+
+    } catch (error) {
+        console.error("error: ", error);
+    }
 })();

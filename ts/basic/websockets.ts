@@ -1,39 +1,67 @@
 import WebSocket from "ws";
+import * as dotenv from 'dotenv';
 
-const WEBSOCKET_URL = "wss://rpc.mainnet-alpha.sonic.game";
-const methodName = "accountSubscribe"; // method you want to call
-const accountAddress = "WALLET_ADDRESS";
+dotenv.config();
 
-const ws = new WebSocket(WEBSOCKET_URL);
+(async () => {
+  try {
+    const websocketUrl = process.env.WS_ENDPOINT;
+    const methodName = 'accountSubscribe';
+    const accountAddress = process.env.PUBLIC_KEY;
+    const encoding = 'jsonParsed';
+    const commitment = 'confirmed';
 
-ws.on("open", () => {
-  console.log("Connected to Sonic Mainnet WebSocket");
+   
+    const ws = new WebSocket(websocketUrl);
 
-  // Call a method after connection is established
-  const requestPayload = {
-    jsonrpc: "2.0",
-    method: methodName,
-    params: [
-      accountAddress,
-      {
-        encoding: "jsonParsed",
-        commitment: "confirmed",
-      },
-    ], // Add your parameters here if needed
-    id: 1,
-  };
+    ws.on("open", () => {
+      console.log("Connected to Sonic WebSocket");
 
-  ws.send(JSON.stringify(requestPayload));
-});
+      // Call a method after connection is established
+      const requestPayload = {
+        jsonrpc: "2.0",
+        method: methodName,
+        params: [
+          accountAddress,
+          {
+            encoding: encoding,
+            commitment: commitment,
+          },
+        ],
+        id: 1,
+      };
 
-ws.on("message", (data) => {
-  console.log("Received:", data);
-});
+      console.log("Sending subscription request...");
+      ws.send(JSON.stringify(requestPayload));
+    });
 
-ws.on("error", (error) => {
-  console.error("WebSocket error:", error);
-});
+    ws.on("message", (data) => {
+      try {
+        const parsed = JSON.parse(data.toString());
+        console.log("Received data:");
+        console.log(JSON.stringify(parsed, null, 2));
+      } catch (error) {
+        console.log("Received raw data:", data.toString());
+      }
+    });
 
-ws.on("close", () => {
-  console.log("WebSocket connection closed");
-});
+    ws.on("error", (error) => {
+      console.error("WebSocket error:", error);
+    });
+
+    ws.on("close", (code, reason) => {
+      console.log(`WebSocket connection closed. Code: ${code}, Reason: ${reason}`);
+    });
+
+    // Graceful shutdown
+    process.on('SIGINT', () => {
+      console.log("\nShutting down WebSocket connection...");
+      ws.close();
+      process.exit(0);
+    });
+
+  } catch (error) {
+    console.error("Error:", error instanceof Error ? error.message : 'Unknown error');
+    process.exit(1);
+  }
+})();

@@ -17,8 +17,10 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-const privateKey = "YOUR_PRIVATE_KEY";
+const privateKey = process.env.SONIC_PRIVATE_KEY;
 
 async function wrapSol(
   connection: Connection,
@@ -61,6 +63,22 @@ async function unwrapSol(
     wallet.publicKey
   );
 
+  // Check if the wrapped SOL account exists
+  const accountInfo = await connection.getAccountInfo(associatedTokenAccount);
+  if (!accountInfo) {
+    console.log("No wrapped SOL account found. Nothing to unwrap.");
+    return;
+  }
+
+  // Check if there's any wrapped SOL to unwrap
+  const tokenBalance = await connection.getTokenAccountBalance(associatedTokenAccount);
+  if (tokenBalance.value.uiAmount === 0) {
+    console.log("Wrapped SOL account has zero balance. Nothing to unwrap.");
+    return;
+  }
+
+  console.log(`Unwrapping ${tokenBalance.value.uiAmount} wrapped SOL...`);
+
   const unwrapTransaction = new Transaction().add(
     createCloseAccountInstruction(
       associatedTokenAccount,
@@ -75,30 +93,53 @@ async function unwrapSol(
 }
 
 async function main() {
-  const connection = new Connection("https://api.mainnet-alpha.sonic.game/");
+  try {
+    console.log("Starting SOL wrap/unwrap demo...");
+    
+    const connection = new Connection("https://api.mainnet-alpha.sonic.game/");
+    const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
 
-  const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
+    console.log(`Wallet: ${keypair.publicKey.toBase58()}`);
 
-  const balance = await connection.getBalance(
-    new PublicKey(keypair.publicKey.toBase58()),
-    "confirmed"
-  );
-  console.log("Your balance is", balance / LAMPORTS_PER_SOL);
+    const balance = await connection.getBalance(
+      new PublicKey(keypair.publicKey.toBase58()),
+      "confirmed"
+    );
+    console.log(`Current balance: ${balance / LAMPORTS_PER_SOL} SOL`);
 
-  //   console.log("Wrapping SOL...");
-  //   await wrapSol(connection, keypair, 0.001);
+    if (balance < 0.01 * LAMPORTS_PER_SOL) {
+      console.log("Insufficient balance. Need at least 0.01 SOL for this demo.");
+      return;
+    }
 
-  //   const associatedTokenAccount = await wrapSol(connection, keypair, 0.001);
+    // Step 1: Wrap some SOL first
+    console.log("\nStep 1: Wrapping 0.001 SOL...");
+    const associatedTokenAccount = await wrapSol(connection, keypair, 0.001);
+    console.log(`Wrapped SOL account: ${associatedTokenAccount.toBase58()}`);
 
-  //   console.log("Associated Token Account", associatedTokenAccount.toBase58());
+    // Check balance after wrapping
+    const balanceAfterWrap = await connection.getBalance(
+      new PublicKey(keypair.publicKey.toBase58()),
+      "confirmed"
+    );
+    console.log(`Balance after wrapping: ${balanceAfterWrap / LAMPORTS_PER_SOL} SOL`);
 
-  console.log("Unwrapping SOL...");
-  await unwrapSol(connection, keypair);
-  const newBalance = await connection.getBalance(
-    new PublicKey(keypair.publicKey.toBase58()),
-    "confirmed"
-  );
-  console.log("new balance", newBalance / LAMPORTS_PER_SOL);
+    // Step 2: Now unwrap the SOL
+    console.log("\nStep 2: Unwrapping SOL...");
+    await unwrapSol(connection, keypair);
+    
+    const finalBalance = await connection.getBalance(
+      new PublicKey(keypair.publicKey.toBase58()),
+      "confirmed"
+    );
+    console.log(`Final balance: ${finalBalance / LAMPORTS_PER_SOL} SOL`);
+    
+    console.log("\nDemo completed successfully!");
+
+  } catch (error) {
+    console.error("Error:", error instanceof Error ? error.message : 'Unknown error');
+    process.exit(1);
+  }
 }
 
 main();
